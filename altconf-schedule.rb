@@ -1,4 +1,6 @@
 require 'pp'
+require 'date'
+require 'time'
 require 'csv'
 require 'json'
 
@@ -10,9 +12,12 @@ class Speaker
   
 end
 
+NON_SESSIONS = ["Setup", "Open Doors", "Lunch", "Cleanup", "End of Day", "Break"]
+
 class Session  
   
-  NON_SESSIONS = ["Setup", "Open Doors", "Lunch", "Cleanup", "End of Day"]
+  
+  
   
   attr_reader :speakers
   attr_reader :location
@@ -80,8 +85,6 @@ sessions_csv.each_with_index do |row,index|
                                                 location: location,
                                                 speaker: speaker_for_session }
       end
-      
-      # puts "#{day}, #{time}, #{location}" #": #{speaker_for_session} as #{location}"
     end
     
   end
@@ -92,4 +95,32 @@ end
 
 # pp day_per_col
 # pp locations_per_col
-pp sessions_per_day_and_location
+# pp sessions_per_day_and_location
+
+for key in sessions_per_day_and_location.keys 
+  day = key[0]
+  date = day.split(",").last
+  puts
+  puts "# Day #{key[0]}, Room #{key[1]}"
+  sessions = sessions_per_day_and_location[key]
+  sessions.each_with_index do |session, index|
+    next if sessions.nil?
+    
+    next_session = if sessions.count > index 
+      sessions[index+1]
+    end
+    start_time = Time.parse("#{date} 2017 #{session[:time]} PDT") # AltConf is in San Jose so PDT
+    end_time = if next_session
+      Time.parse("#{date} 2017 #{next_session[:time]} PDT") # AltConf is in San Jose so PDT    
+    else
+      Time.at(start_time.to_i + 30.0 * 60.0) # default to 30 min sessions
+    end
+    duration = end_time.to_i - start_time.to_i
+
+    unless NON_SESSIONS.include?(session[:speaker])
+      puts "#{session[:speaker]}, #{start_time}, #{duration / 60.0} min"
+    end
+  end
+  
+end
+
