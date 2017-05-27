@@ -5,40 +5,64 @@ require 'csv'
 require 'json'
 
 class Speaker 
-  attr_reader :name
-  attr_reader :bio
-  attr_reader :email, :twitter
-  attr_reader :avatar_url
+  attr_accessor :name
+  attr_accessor :bio
+  attr_accessor :email, :twitter
+  attr_accessor :avatar_url
   
+  def self.from_row(csv_row)
+    speaker = Speaker.new
+    speaker.name = csv_row["Name"]
+    speaker.email = csv_row["Email"]
+    speaker.twitter = csv_row["Twitter"]
+    speaker.bio = csv_row["Bio"]
+    speaker.avatar_url = csv_row["Gravatar"]
+    speaker
+  end
 end
+
+class Session  
+  attr_accessor :speakers
+  attr_accessor :location
+  attr_accessor :begin, :end
+  attr_accessor :title, :abstract
+  attr_accessor :recording_mp4_url
+  attr_accessor :recording_youtube_url
+  attr_accessor :slides_url
+  
+  # in seconds
+  def duration
+    (@end.to_id - @begin.to_i)
+  end
+  
+  def initialize
+    @speakers = []
+  end
+  
+  def update_with_speaker_row(csv_row)
+    @abstract = csv_row["Abstract"]
+    @title = csv_row["Session Name"]
+    @recording_mp4_url = csv_row["Video MP4 URL"]
+    @slides_url = csv_row["Slides"]
+    self
+  end
+end
+
 
 NON_SESSIONS = ["Setup", "Open Doors", "Lunch", "Cleanup", "End of Day", "Break"]
 
-class Session  
-  
-  
-  
-  
-  attr_reader :speakers
-  attr_reader :location
-  attr_reader :begin, :end
-  attr_reader :title, :abstract
-end
-
 class Location
-  attr_reader :name
-  
-  def identifier
-    return @name
-  end
-  
-  def initialize(name)
-    @name = name
-  end
+  attr_accessor :name
 end
 
-# speakers_csv = CSV.new(File.expand_path(ARGV[-2]), {headers: true})
+class Track
+  attr_accessor :name
+end
+
 sessions_csv = CSV.new(File.read(File.expand_path(ARGV[-1])), {headers: false})
+
+
+## SORT AND FILTER SCHEDULE
 
 locations_per_col = []
 day_per_col = []
@@ -47,7 +71,6 @@ sessions_per_day_and_location = {}
 
 sessions_csv.each_with_index do |row,index|
   
-
   if index == 0 # Day
     last_day = nil
     row.each_with_index do |day, index|
@@ -88,20 +111,22 @@ sessions_csv.each_with_index do |row,index|
     end
     
   end
-  
 end
 
 
 
-# pp day_per_col
-# pp locations_per_col
-# pp sessions_per_day_and_location
+## OUTPUT
+
+all_locations = {}
+all_sessions = []
+all_speakers = []
 
 for key in sessions_per_day_and_location.keys 
   day = key[0]
   date = day.split(",").last
+  room = key[1]
   puts
-  puts "# Day #{key[0]}, Room #{key[1]}"
+  puts "# Day #{day}, Room #{room}"
   sessions = sessions_per_day_and_location[key]
   sessions.each_with_index do |session, index|
     next if sessions.nil?
@@ -116,10 +141,41 @@ for key in sessions_per_day_and_location.keys
       Time.at(start_time.to_i + 30.0 * 60.0) # default to 30 min sessions
     end
     duration = end_time.to_i - start_time.to_i
-
-    unless NON_SESSIONS.include?(session[:speaker])
-      puts "#{session[:speaker]}, #{start_time}, #{duration / 60.0} min"
+    speaker = session[:speaker].strip
+    unless NON_SESSIONS.include?(speaker)
+      puts "#{speaker}, #{start_time}, #{duration / 60.0} min"
+      
+      location = all_locations[room]
+      location ||= Location.new
+      location.name = room
+      all_locations[room] = location
+      
+      
+      session = Session.new
+      session.speakers = [speaker]
+      session.begin = start_time
+      session.end = end_time
+      session.location = location
+      
+      all_sessions << session
     end
+  end
+  
+end
+
+## SPEAKERS
+
+speakers_csv = CSV.new(File.read(File.expand_path(ARGV[-2])), {headers: true})
+
+speakers_csv.each do |row|
+  speaker = Speaker.from_row(row)
+  session = all_sessions.find {|session| session.speakers.include?(speaker.name) }
+  
+  if session
+    session.update_with_speaker_row(row)
+    session.speakers = [speaker]
+
+    all_speakers << speaker
   end
   
 end
