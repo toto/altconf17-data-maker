@@ -3,12 +3,14 @@ require 'date'
 require 'time'
 require 'csv'
 require 'json'
+require 'digest'
 
 class Speaker 
   attr_accessor :name
   attr_accessor :bio
   attr_accessor :email, :twitter
   attr_accessor :avatar_url
+  attr_accessor :sessions
   
   def self.from_row(csv_row)
     speaker = Speaker.new
@@ -18,6 +20,35 @@ class Speaker
     speaker.bio = csv_row["Bio"]
     speaker.avatar_url = csv_row["Gravatar"]
     speaker
+  end
+  
+  def initialize
+    @sessions = []
+  end
+  
+  def identifier
+    Digest::SHA1.hexdigest(name) 
+  end
+  
+  def to_h(minimal=false)
+    if minimal
+      return {
+        id: identifier,
+        name: name,
+      }
+    end
+    
+    {
+      id: identifier,
+      name: name,
+      photo: avatar_url,
+      url: "http://altconf.com/17/speakers/#{identifier}"
+      organization: nil,
+      position: nil,
+      biography: bio,
+      sessions: sessions,
+      links: []
+     }
   end
 end
 
@@ -46,6 +77,89 @@ class Session
     @slides_url = csv_row["Slides"]
     self
   end
+  
+  def identifier
+    speaker_ids = speakers.sort { |a,b| a.name <=> b.name }.map { |speaker| speaker.identifier }.join("-")
+    Digest::SHA1.hexdigest(speaker_ids)
+  end
+  
+  def to_h
+    {
+      id: identifier,
+      title: title,
+      subtitle: nil,
+      abstract: abstract,
+      description: nil,
+      url: "https://altconf.com/17/sessions/#{identifier}",
+      begin: self.begin.iso8601,
+      end: self.end.iso8601,
+      duration: duration / 60.0, # in minutes
+      day: day,
+      location: location.to_h,
+      track: track.to_h,
+      lang: lang,
+      level: level,
+      speakers: speakers.map { |s| s.to_h(true) }
+    }
+  end
+  
+  def lang
+    {
+      id: "en",
+      label_de: "Englisch",
+      label_en: "English"
+    }
+  end
+  
+  def format
+    {
+      id: "talk",
+      label_de: "Vortrag",
+      label_en: "Talk"
+    }
+  end
+  
+  def level
+    {
+      id: "advanced",
+      label_de: "Fortgeschritten",
+      label_de: "Advanced",
+    }
+  end
+  
+  def day
+    daystamp = self.begin.strftime("%Y-%m-%d")
+    {
+      id: daystamp,
+      date: daystamp,
+      label_de: self.begin.strftime("%A"),
+      label_en: self.begin.strftime("%A"),
+      type: "day"
+   }
+  end
+  
+  # TODO: Add MP4 url
+  def enclosures
+    return [] if recording_mp4_url.nil?
+    
+    [{
+    	url: recording_mp4_url,
+    	mimetype: "video/mp4",
+    	type: "recording"
+    }]
+  end
+  
+  def links
+    return [] if slides_url.nil?
+    
+    [
+      {
+        title: "Slides: #{title}",
+        url: slides_url,
+        type: "slides"
+      }
+    ]
+  end
 end
 
 
@@ -53,10 +167,36 @@ NON_SESSIONS = ["Setup", "Open Doors", "Lunch", "Cleanup", "End of Day", "Break"
 
 class Location
   attr_accessor :name
+  
+  def to_h
+    
+  end
 end
 
 class Track
-  attr_accessor :name
+  attr_accessor :name, :color
+  
+  def initialize(name, color)
+    @name = name
+    @color = color
+  end
+  
+  def self.altconf
+    @altconf ||= Trach.new("AltConf", [0.082, 0.678, 0.239])
+  end
+  
+  def identifier
+    @name.downcase
+  end
+  
+  def to_h
+    {
+      id: identifier,
+      label_de: name,
+      label_en: name,     
+      color: color
+    }
+  end
 end
 
 sessions_csv = CSV.new(File.read(File.expand_path(ARGV[-1])), {headers: false})
