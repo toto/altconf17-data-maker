@@ -30,6 +30,10 @@ class Speaker
     Digest::SHA1.hexdigest(name) 
   end
   
+  def to_s
+    name
+  end
+  
   def to_h(minimal=false)
     if minimal
       return {
@@ -42,11 +46,11 @@ class Speaker
       id: identifier,
       name: name,
       photo: avatar_url,
-      url: "http://altconf.com/17/speakers/#{identifier}"
+      url: "http://altconf.com/17/speakers/#{identifier}",
       organization: nil,
       position: nil,
       biography: bio,
-      sessions: sessions,
+      sessions: sessions.map {|s| s.to_h(true) },
       links: []
      }
   end
@@ -63,7 +67,7 @@ class Session
   
   # in seconds
   def duration
-    (@end.to_id - @begin.to_i)
+    (@end.to_i - @begin.to_i)
   end
   
   def initialize
@@ -72,18 +76,29 @@ class Session
   
   def update_with_speaker_row(csv_row)
     @abstract = csv_row["Abstract"]
-    @title = csv_row["Session Name"]
+    if csv_row["Session Name"] && !csv_row["Session Name"].empty? 
+      @title = csv_row["Session Name"]
+    end
     @recording_mp4_url = csv_row["Video MP4 URL"]
     @slides_url = csv_row["Slides"]
     self
   end
   
   def identifier
-    speaker_ids = speakers.sort { |a,b| a.name <=> b.name }.map { |speaker| speaker.identifier }.join("-")
+
+    speaker_ids = speakers.sort { |a,b| a.to_s <=> b.to_s }.join("-")
+    speaker_ids = self.begin.to_s if speakers.empty?
     Digest::SHA1.hexdigest(speaker_ids)
   end
   
-  def to_h
+  def to_h(minimal=false)
+    if minimal
+      return {
+                id: identifier,
+                title: title
+             }
+    end
+    
     {
       id: identifier,
       title: title,
@@ -125,6 +140,10 @@ class Session
       label_de: "Fortgeschritten",
       label_de: "Advanced",
     }
+  end
+  
+  def track
+    Track.altconf
   end
   
   def day
@@ -169,7 +188,9 @@ class Location
   attr_accessor :name
   
   def to_h
-    
+    {id: name.downcase.gsub(/ /, "-"),
+     label_en: name,
+     label_de: name}
   end
 end
 
@@ -182,7 +203,7 @@ class Track
   end
   
   def self.altconf
-    @altconf ||= Trach.new("AltConf", [0.082, 0.678, 0.239])
+    @altconf ||= Track.new("AltConf", [0.082, 0.678, 0.239])
   end
   
   def identifier
@@ -281,9 +302,9 @@ for key in sessions_per_day_and_location.keys
       Time.at(start_time.to_i + 30.0 * 60.0) # default to 30 min sessions
     end
     duration = end_time.to_i - start_time.to_i
-    speaker = session[:speaker].strip
-    unless NON_SESSIONS.include?(speaker)
-      puts "#{speaker}, #{start_time}, #{duration / 60.0} min"
+    speakers = session[:speaker].strip.split("&").map{|s| s.strip}
+    unless NON_SESSIONS.include?(speakers.first)
+      puts "#{speakers.join(",")}, #{start_time}, #{duration / 60.0} min"
       
       location = all_locations[room]
       location ||= Location.new
@@ -292,10 +313,11 @@ for key in sessions_per_day_and_location.keys
       
       
       session = Session.new
-      session.speakers = [speaker]
+      session.speakers = speakers
       session.begin = start_time
       session.end = end_time
       session.location = location
+      session.title = speakers.join(",")
       
       all_sessions << session
     end
@@ -311,6 +333,8 @@ speakers_csv.each do |row|
   speaker = Speaker.from_row(row)
   session = all_sessions.find {|session| session.speakers.include?(speaker.name) }
   
+  speaker.sessions = [session]
+  
   if session
     session.update_with_speaker_row(row)
     session.speakers = [speaker]
@@ -318,5 +342,26 @@ speakers_csv.each do |row|
     all_speakers << speaker
   end
   
+end
+
+all_sessions.each do |session|
+  speakers = all_speakers.select {|speaker| session.speakers.map {|ss| ss.to_s}.include?(speaker.name) }
+  if speakers && !speakers.empty?
+    session.speakers = speakers
+  else
+    session.speakers = []
+    # pp session
+  end
+end
+
+result = {}
+
+result["speakers"] = all_speakers.reject{|s| s.name == nil }.map {|s| s.to_h }
+result["sessions"] = all_sessions.reject {|s| s.title == nil }.map {|s| s.to_h }
+result["tracks"] = [Track.altconf.to_h]
+result["locations"] = all_locations.values.map {|l| l.to_h }
+
+File.open("altconf17.json", "w+") do |f|
+  JSON.dump(result, f)
 end
 
