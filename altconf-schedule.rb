@@ -6,7 +6,7 @@ require 'json'
 require 'digest'
 
 class Speaker 
-  attr_accessor :name
+  attr_accessor :name, :organization
   attr_accessor :bio
   attr_accessor :email, :twitter
   attr_accessor :avatar_url
@@ -19,6 +19,7 @@ class Speaker
     speaker.twitter = csv_row["Twitter"]
     speaker.bio = csv_row["Bio"]
     speaker.avatar_url = csv_row["Gravatar"]
+    speaker.organization = csv_row["Company"]
     speaker
   end
   
@@ -47,7 +48,7 @@ class Speaker
       name: name,
       photo: avatar_url,
       url: "http://altconf.com/17/speakers/#{identifier}",
-      organization: nil,
+      organization: organization,
       position: nil,
       biography: bio,
       sessions: sessions.map {|s| s.to_h(true) },
@@ -218,6 +219,11 @@ class Track
       color: color
     }
   end
+end
+
+if ARGV.count != 2
+  puts "usage: ruby #{__FILE__} speakers.csv sessions.csv"
+  exit(0)
 end
 
 sessions_csv = CSV.new(File.read(File.expand_path(ARGV[-1])), {headers: false})
