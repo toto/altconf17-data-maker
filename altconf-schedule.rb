@@ -183,7 +183,7 @@ class Session
 end
 
 
-NON_SESSIONS = ["Setup", "Open Doors", "Lunch", "Cleanup", "End of Day", "Break"]
+NON_SESSIONS = ["Setup", "Open Doors", "Lunch", "Cleanup", "End of Day", "Break", "OPEN"]
 
 class Location
   attr_accessor :name
