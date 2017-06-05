@@ -139,7 +139,7 @@ class Session
     {
       id: "advanced",
       label_de: "Fortgeschritten",
-      label_de: "Advanced",
+      label_en: "Advanced",
     }
   end
   
